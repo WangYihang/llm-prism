@@ -35,8 +35,8 @@ go.work.sum
 # Added by goreleaser init:
 dist/
 
-# Add changelog folder  
-changelog/
+# Add changelog file
+CHANGELOG.md
 
 # Log files
 *.jsonl
