@@ -6,11 +6,40 @@ import (
 	"net/http/httputil"
 
 	"github.com/WangYihang/http-grab/pkg/model"
+	"github.com/alecthomas/kong"
 	"github.com/wangyihang/llm-prism/pkg/llms/providers"
+	"github.com/wangyihang/llm-prism/pkg/version"
 )
 
+type CLI struct {
+	Run struct {
+		ApiURL string `help:"The API base URL." env:"LLM_PRISM_API_URL" default:"https://api.deepseek.com/anthropic"`
+		ApiKey string `help:"The API key." env:"LLM_PRISM_API_KEY" required:""`
+		Host   string `help:"The host to listen on." env:"LLM_PRISM_HOST" default:"0.0.0.0"`
+		Port   int    `help:"The port to listen on." env:"LLM_PRISM_PORT" default:"4000"`
+	} `cmd:"" help:"Run the proxy server."`
+	Version struct {
+	} `cmd:"" help:"Print version information."`
+}
+
 func main() {
-	deepseekProvider := providers.NewDeepseekProvider("https://api.deepseek.com/anthropic", "sk-3a197085316e44f596cad242c914905e")
+	var cli CLI
+	ctx := kong.Parse(&cli,
+		kong.Name("llm-prism"),
+		kong.Description("A proxy server for LLM API requests."),
+		kong.UsageOnError(),
+	)
+
+	switch ctx.Command() {
+	case "run":
+		runProxy(cli.Run.ApiURL, cli.Run.ApiKey, cli.Run.Host, cli.Run.Port)
+	case "version":
+		fmt.Println(version.GetVersionInfo().JSON())
+	}
+}
+
+func runProxy(apiURL, apiKey, host string, port int) {
+	deepseekProvider := providers.NewDeepseekProvider(apiURL, apiKey)
 	proxy := httputil.NewSingleHostReverseProxy(deepseekProvider.Target())
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
@@ -34,7 +63,9 @@ func main() {
 		fmt.Println(">>>> response: ", httpResponse)
 		return nil
 	}
-	err := http.ListenAndServe(":4000", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	fmt.Printf("Starting proxy server on %s\n", addr)
+	err := http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxy.ServeHTTP(w, r)
 	}))
 	if err != nil {
