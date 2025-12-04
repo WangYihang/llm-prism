@@ -1,0 +1,77 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: llm-prism
+    env:
+      - CGO_ENABLED=0
+    binary: llm-prism
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s
+      - -w
+      - -X github.com/wangyihang/llm-prism/pkg/version.Version={{.Version}}
+      - -X github.com/wangyihang/llm-prism/pkg/version.Commit={{.Commit}}
+      - -X github.com/wangyihang/llm-prism/pkg/version.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+checksum:
+  name_template: "{{ .ProjectName }}_checksums.txt"
+  algorithm: sha256
+
+report_sizes: true
+
+dockers_v2:
+  - id: llm-prism
+    dockerfile: "Dockerfile"
+    ids:
+      - llm-prism
+    images:
+      - "ghcr.io/wangyihang/llm-prism"
+    tags:
+      - "v{{ .Version }}"
+      - "{{ if .IsNightly }}nightly{{ end }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
+    labels:
+      "org.opencontainers.image.description": "LLM Prism"
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+    annotations:
+      "project": "{{.ProjectName}}"
+    platforms:
+      - linux/amd64
+    disable: "{{ .IsSnapshot }}"
+    sbom: "{{ not .IsNightly }}"
+    retry:
+      attempts: 5
+      delay: 5s
+      max_delay: 2m
