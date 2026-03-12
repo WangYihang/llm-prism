@@ -62,41 +62,6 @@ func TestRedactRequest(t *testing.T) {
 	}
 }
 
-func TestStreamRedactorSlidingWindow(t *testing.T) {
-	r := &Redactor{
-		config: &Config{
-			Rules: []Rule{
-				{ID: "split-secret", RawRegex: "DANGER_ZONE"},
-			},
-		},
-		logs: zerolog.Nop(),
-	}
-	if err := r.config.Rules[0].Compile(); err != nil {
-		t.Fatalf("Failed to compile rule: %v", err)
-	}
-	r.detectors = []Detector{NewRegexDetector(r.config.Rules)}
-
-	// 使用较大窗口以容纳完整占位符
-	sr := NewStreamRedactor(context.Background(), r, 30)
-
-	// 模拟敏感词被切分： "DAN" + "GER_ZONE"
-	line1 := `data: {"choices":[{"delta":{"content":"DAN"}}]} `
-	line2 := `data: {"choices":[{"delta":{"content":"GER_ZONE suffix"}}]} `
-
-	res1 := sr.RedactSSELine([]byte(line1))
-	res2 := sr.RedactSSELine([]byte(line2))
-	res3 := sr.Flush()
-
-	fullResult := string(res1) + string(res2) + string(res3)
-
-	if strings.Contains(fullResult, "DANGER_ZONE") {
-		t.Errorf("Secret leaked: %s", fullResult)
-	}
-	if !strings.Contains(fullResult, RedactedPlaceholder) {
-		t.Errorf("Placeholder missing: %s", fullResult)
-	}
-}
-
 func TestDetectionLogging(t *testing.T) {
 	var buf bytes.Buffer
 	r := &Redactor{
@@ -121,7 +86,7 @@ func TestDetectionLogging(t *testing.T) {
 	}
 }
 
-func TestStreamRedactorEdgeCases(t *testing.T) {
+func TestRedactValueRecursively(t *testing.T) {
 	r := &Redactor{
 		config: &Config{
 			Rules: []Rule{
@@ -133,50 +98,14 @@ func TestStreamRedactorEdgeCases(t *testing.T) {
 	_ = r.config.Rules[0].Compile()
 	r.detectors = []Detector{NewRegexDetector(r.config.Rules)}
 
-	sr := NewStreamRedactor(context.Background(), r, 10)
-
-	// Test non-data line
-	nonData := []byte("invalid line\n")
-	if !bytes.Equal(sr.RedactSSELine(nonData), nonData) {
-		t.Error("Should return non-data line untouched")
-	}
-
-	// Test DONE line without pending data
-	doneLine := []byte("data: [DONE]\n")
-	if !bytes.Equal(sr.RedactSSELine(doneLine), doneLine) {
-		t.Error("Should return DONE line untouched if no pending")
-	}
-
-	// Test DONE line with pending data
-	sr.RedactSSELine([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"MY_\"}}]}\n"))
-	outDone := sr.RedactSSELine(doneLine)
-	if !strings.Contains(string(outDone), "MY_") || !strings.Contains(string(outDone), "[DONE]") {
-		t.Error("Should flush pending data before DONE")
-	}
-
-	// Test empty content
-	sr = NewStreamRedactor(context.Background(), r, 10)
-	sr.RedactSSELine([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"MY_\"}}]}\n"))
-	emptyContentLine := []byte("data: {\"choices\":[{\"delta\":{}}]}\n")
-	outEmpty := sr.RedactSSELine(emptyContentLine)
-	if !strings.Contains(string(outEmpty), "MY_") || !strings.Contains(string(outEmpty), "delta\":{}") {
-		t.Error("Should flush pending before empty content line")
-	}
-
-	// Test invalid JSON
-	invalidJSON := []byte("data: {invalid\n")
-	if !bytes.Equal(sr.RedactSSELine(invalidJSON), invalidJSON) {
-		t.Error("Should return invalid JSON line untouched")
-	}
-
-	// Test RedactValue recursively
-	val := sr.r.RedactValue(context.Background(), []interface{}{"A_MY_PASSWORD_B", map[string]interface{}{"key": "MY_PASSWORD"}})
+	val := r.RedactValue(context.Background(), []interface{}{"A_MY_PASSWORD_B", map[string]interface{}{"key": "MY_PASSWORD"}})
 	valJSON, _ := json.Marshal(val)
 	if strings.Contains(string(valJSON), "MY_PASSWORD") {
 		t.Errorf("RedactValue failed to redact recursively: %s", string(valJSON))
 	}
+}
 
-	// Test Config load fallback (JSON instead of TOML)
+func TestConfigLoadFallback(t *testing.T) {
 	jsonConfig := `{"rules": [{"id": "json-rule", "description": "desc", "regex": "JSON_SECRET"}]}`
 	tmpFile := "test_rules.json"
 	_ = os.WriteFile(tmpFile, []byte(jsonConfig), 0644)

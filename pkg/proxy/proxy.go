@@ -31,7 +31,6 @@ func (w *proxyLogWriter) Write(p []byte) (n int, err error) {
 // This interface decouples the proxy from the concrete redactor implementation.
 type ContentRedactor interface {
 	RedactRequest(ctx context.Context, body []byte) ([]byte, error)
-	WrapSSEReader(ctx context.Context, rc io.ReadCloser) io.ReadCloser
 }
 
 // New creates a new goproxy.ProxyHttpServer configured for LLM traffic interception.
@@ -97,14 +96,15 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 
 		var responseBody []byte
 		if resp != nil && resp.Body != nil {
-			contentType := resp.Header.Get("Content-Type")
-			if strings.Contains(contentType, "text/event-stream") && rdr != nil {
-				resCtx := context.Background()
-				resCtx = context.WithValue(resCtx, ctxkeys.RequestID, requestID)
-				resCtx = context.WithValue(resCtx, ctxkeys.Source, "response_sse")
+			contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+			isStream := strings.Contains(contentType, "text/event-stream") ||
+				strings.Contains(contentType, "application/x-ndjson") ||
+				strings.Contains(contentType, "application/stream+json") ||
+				strings.Contains(contentType, "application/jsonl")
 
-				resp.Body = rdr.WrapSSEReader(resCtx, resp.Body)
-			} else {
+			// For streaming responses, we do not read or buffer the body to maintain true zero-latency.
+			// We only read normal, discrete responses to log them.
+			if !isStream {
 				var err error
 				responseBody, err = io.ReadAll(resp.Body)
 				if err == nil {
