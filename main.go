@@ -22,5 +22,7 @@ func main() {
 		commands.Sync(&cli, logs)
 	case "run":
 		commands.Run(&cli, logs)
+	case "exec":
+		commands.Exec(&cli, logs)
 	}
 }

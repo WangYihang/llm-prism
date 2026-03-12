@@ -26,8 +26,14 @@ llm-prism sync
 ```
 
 ### 3. Run
+The easiest way is to use `exec`, which automatically starts the proxy and injects environment variables (like `ANTHROPIC_BASE_URL`) into your command:
 ```bash
 export LLM_PRISM_API_KEY=sk-your-real-key
+llm-prism exec -- claude
+```
+
+Alternatively, run the proxy manually:
+```bash
 llm-prism run
 ```
 
@@ -35,7 +41,13 @@ llm-prism run
 
 ## Integration
 
-Point your LLM client's base URL to `http://localhost:4000`.
+If you use `llm-prism exec`, the following variables are injected automatically:
+- `ANTHROPIC_BASE_URL`
+- `OPENAI_BASE_URL`
+- `OPENAI_API_BASE`
+- `DEEPSEEK_BASE_URL`
+
+To manually connect your tool, point the base URL to `http://localhost:4000`:
 
 ### Claude Code
 ```bash
