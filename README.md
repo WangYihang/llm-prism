@@ -67,6 +67,39 @@ export ANTHROPIC_AUTH_TOKEN=anything  # The proxy handles the real authenticatio
 claude
 ```
 
+## Privacy Protection Comparison
+
+When you use `llm-prism`, sensitive information is intercepted and redacted **locally** before it ever leaves your machine.
+
+### 🔴 Without llm-prism (Direct Connection)
+Your sensitive data is sent directly to the LLM provider's servers.
+```json
+// PAYLOAD SENT TO PROVIDER
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "My DeepSeek key is sk-7dd4d43022ee4cc29ace0eecb7d3363e"
+    }
+  ]
+}
+```
+
+### 🟢 With llm-prism (Protected)
+Sensitive data is identified and replaced with a placeholder. The provider only sees the redacted version.
+```json
+// PAYLOAD SENT TO PROVIDER
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "My DeepSeek key is [REDACTED_SECRET]"
+    }
+  ]
+}
+```
+*The original secret is still captured in your **local** detection logs for auditing purposes, but it never reaches the provider.*
+
 ## Security & Redaction
 
 `llm-prism` uses a recursive redaction engine that handles:
