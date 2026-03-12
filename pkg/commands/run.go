@@ -14,6 +14,7 @@ import (
 	"github.com/wangyihang/llm-prism/pkg/config"
 	"github.com/wangyihang/llm-prism/pkg/proxy"
 	"github.com/wangyihang/llm-prism/pkg/redactor"
+	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
 	"github.com/wangyihang/llm-prism/pkg/utils/logging"
 )
 
@@ -49,7 +50,15 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int) (
 	}
 
 	sessionDir := filepath.Dir(cli.AppLogFile)
-	p := proxy.New(contentRedactor, logs.System, logs.SystemFile, logs.Traffic, sessionDir)
+	p, closeRelay := proxy.New(contentRedactor, logs.System, logs.SystemFile, logs.Traffic, sessionDir)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Store the ResponseWriter in the context so that it can be hijacked
+		// from within goproxy handlers. This is necessary for WebSocket support.
+		ctx := context.WithValue(r.Context(), ctxkeys.ResponseWriter, w)
+
+		p.ServeHTTP(w, r.WithContext(ctx))
+	})
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	ln, err := net.Listen("tcp", addr)
@@ -59,7 +68,7 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int) (
 	actualAddr := ln.Addr().String()
 
 	server := &http.Server{
-		Handler: p,
+		Handler: handler,
 	}
 
 	go func() {
@@ -73,6 +82,7 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int) (
 	return rdr, actualAddr, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
+		_ = closeRelay(ctx)
 		_ = server.Shutdown(ctx)
 	}, nil
 }

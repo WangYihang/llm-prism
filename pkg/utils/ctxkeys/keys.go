@@ -8,6 +8,7 @@ const (
 	Host      ContextKey = "host"
 	Path      ContextKey = "path"
 	Method    ContextKey = "method"
+	ResponseWriter ContextKey = "response_writer"
 )
 
 // GetString safely extracts a string value from context

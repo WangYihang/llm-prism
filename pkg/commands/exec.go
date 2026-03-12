@@ -98,9 +98,16 @@ func Exec(cli *config.CLI, logs *logging.Loggers) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		closeProxy()
-		os.Exit(0)
+		for sig := range sigChan {
+			if cmd.Process != nil {
+				if err := cmd.Process.Signal(sig); err != nil {
+					logs.System.Warn().Err(err).Msg("failed to forward signal to child process")
+				}
+			} else {
+				closeProxy()
+				os.Exit(0)
+			}
+		}
 	}()
 
 	err = cmd.Run()

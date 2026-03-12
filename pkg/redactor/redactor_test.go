@@ -71,7 +71,7 @@ func TestRedactRequest(t *testing.T) {
 	defer r.Close()
 
 	reqBody := `{"messages": [{"role": "user", "content": "The key is SECRET_KEY_12345"}]}`
-	redacted, _ := r.RedactRequest(context.Background(), []byte(reqBody))
+	redacted, _, _ := r.RedactRequest(context.Background(), []byte(reqBody))
 
 	if strings.Contains(string(redacted), "SECRET_KEY_12345") {
 		t.Error("Secret not redacted in request")
@@ -102,7 +102,7 @@ func TestRedactValueRecursively(t *testing.T) {
 	r := newTestRedactor(rules, zerolog.Nop())
 	defer r.Close()
 
-	val := r.RedactValue(context.Background(), []interface{}{"A_MY_PASSWORD_B", map[string]interface{}{"key": "MY_PASSWORD"}})
+	val, _ := r.RedactValue(context.Background(), []interface{}{"A_MY_PASSWORD_B", map[string]interface{}{"key": "MY_PASSWORD"}})
 	valJSON, _ := json.Marshal(val)
 	if strings.Contains(string(valJSON), "MY_PASSWORD") {
 		t.Errorf("RedactValue failed to redact recursively: %s", string(valJSON))

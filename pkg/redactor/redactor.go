@@ -10,6 +10,7 @@ import (
 
 	gitleaksconfig "github.com/zricethezav/gitleaks/v8/config"
 
+	"github.com/coder/websocket"
 	"github.com/goccy/go-json"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
@@ -213,14 +214,25 @@ func (r *Redactor) Close() {
 
 // RedactContent redacts a single string content and sends detections
 // to the background processor asynchronously.
-func (r *Redactor) RedactContent(ctx context.Context, content string) string {
+// Returns the redacted content and a boolean indicating if any redaction occurred.
+func (r *Redactor) RedactContent(ctx context.Context, content string) (string, bool) {
+	anyRedacted := false
 	for _, detector := range r.detectors {
 		content = detector.Redact(ctx, content, func(match, ruleID, description string) string {
+			anyRedacted = true
 			// Check global allow list (must stay synchronous — affects return value)
 			for _, allow := range r.config.AllowList {
 				if match == allow {
+					anyRedacted = false
 					return match
 				}
+			}
+
+			var replacement string
+			if len(match) > len(RedactedPlaceholder) {
+				replacement = RedactedPlaceholder + strings.Repeat("*", len(match)-len(RedactedPlaceholder))
+			} else {
+				replacement = RedactedPlaceholder[:len(match)]
 			}
 
 			// Send detection event to background processor non-blocking
@@ -241,10 +253,10 @@ func (r *Redactor) RedactContent(ctx context.Context, content string) string {
 				r.logs.Warn().Msg("Detection event channel full, dropping detection metric.")
 			}
 
-			return RedactedPlaceholder
+			return replacement
 		})
 	}
-	return content
+	return content, anyRedacted
 }
 
 func (r *Redactor) GetStats() map[string]int64 {
@@ -258,39 +270,75 @@ func (r *Redactor) GetStats() map[string]int64 {
 
 // Removed Summary func, now handled in summary.go
 
-// RedactValue recursively traverses a JSON-compatible structure and redacts all string values
-func (r *Redactor) RedactValue(ctx context.Context, v interface{}) interface{} {
+// RedactValue recursively traverses a JSON-compatible structure and redacts all string values.
+// Returns the redacted value and a boolean indicating if any redaction occurred.
+func (r *Redactor) RedactValue(ctx context.Context, v interface{}) (interface{}, bool) {
+	anyRedacted := false
 	switch val := v.(type) {
 	case string:
 		return r.RedactContent(ctx, val)
 	case map[string]interface{}:
 		for k, v := range val {
-			val[k] = r.RedactValue(ctx, v)
+			var redacted interface{}
+			var changed bool
+			redacted, changed = r.RedactValue(ctx, v)
+			if changed {
+				val[k] = redacted
+				anyRedacted = true
+			}
 		}
-		return val
+		return val, anyRedacted
 	case []interface{}:
 		for i, v := range val {
-			val[i] = r.RedactValue(ctx, v)
+			var redacted interface{}
+			var changed bool
+			redacted, changed = r.RedactValue(ctx, v)
+			if changed {
+				val[i] = redacted
+				anyRedacted = true
+			}
 		}
-		return val
+		return val, anyRedacted
 	default:
-		return v
+		return v, false
 	}
 }
 
-// RedactRequest redacts all string values in a JSON request body
-func (r *Redactor) RedactRequest(ctx context.Context, body []byte) ([]byte, error) {
+// RedactRequest redacts all string values in a JSON request body.
+// Returns the original body if no secrets were detected, preserving formatting and signatures.
+// Returns (redactedBody, changed, error).
+func (r *Redactor) RedactRequest(ctx context.Context, body []byte) ([]byte, bool, error) {
 	if !json.Valid(body) {
-		return body, nil
+		return body, false, nil
 	}
 
 	var data interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
-		return body, err
+		return body, false, err
 	}
 
-	redactedData := r.RedactValue(ctx, data)
-	return json.Marshal(redactedData)
+	redactedData, changed := r.RedactValue(ctx, data)
+	if !changed {
+		return body, false, nil
+	}
+	res, err := json.Marshal(redactedData)
+	return res, true, err
+}
+
+// RedactWebSocket redacts WebSocket messages.
+func (r *Redactor) RedactWebSocket(ctx context.Context, messageType websocket.MessageType, data []byte) ([]byte, bool, error) {
+	if messageType != websocket.MessageText {
+		return data, false, nil
+	}
+	// Try to treat it as JSON if possible, otherwise as plain text
+	if json.Valid(data) {
+		redacted, changed, err := r.RedactRequest(ctx, data)
+		if err == nil {
+			return redacted, changed, nil
+		}
+	}
+	redacted, changed := r.RedactContent(ctx, string(data))
+	return []byte(redacted), changed, nil
 }
 
 // StreamRedactor implements a sliding window redactor for SSE streams

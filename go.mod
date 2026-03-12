@@ -5,6 +5,7 @@ go 1.25.4
 require (
 	github.com/alecthomas/kong v1.14.0
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/coder/websocket v1.8.14
 	github.com/elazarl/goproxy v1.8.2
 	github.com/goccy/go-json v0.10.6
 	github.com/google/uuid v1.6.0

@@ -22,21 +22,15 @@ type proxyLogWriter struct {
 
 func (w *proxyLogWriter) Write(p []byte) (n int, err error) {
 	msg := strings.TrimSpace(string(p))
-	// Log all goproxy internals to the file-only logger at debug level
-	w.logger.Debug().Msg(msg)
+	w.logger.Info().Msg("[goproxy_debug] " + msg)
 	return len(p), nil
 }
 
-// ContentRedactor defines the redaction capabilities required by the proxy layer.
-// This interface decouples the proxy from the concrete redactor implementation.
-type ContentRedactor interface {
-	RedactRequest(ctx context.Context, body []byte) ([]byte, error)
-}
-
 // New creates a new goproxy.ProxyHttpServer configured for LLM traffic interception.
-func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, sessionDir string) *goproxy.ProxyHttpServer {
+// It returns the proxy and a cleanup function for internal services.
+func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, sessionDir string) (*goproxy.ProxyHttpServer, func(context.Context) error) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.Verbose = false
+	proxy.Verbose = true
 	proxy.Logger = log.New(&proxyLogWriter{logger: sysFileLog}, "", 0)
 
 	caPath, err := GenerateAndSetCA(sessionDir)
@@ -48,15 +42,44 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
+	wsLog, closeWSLog := newWebSocketLogger(sessionDir, sysLog)
+	var wsRelay *WebSocketRelay
+	wsRelay, err = NewWebSocketRelay(rdr, wsLog)
+	if err != nil {
+		sysLog.Warn().Err(err).Msg("failed to start internal websocket relay; websocket traffic will not be redacted")
+	}
+	closeRelay := func(ctx context.Context) error {
+		defer closeWSLog()
+		if wsRelay == nil {
+			return nil
+		}
+		return wsRelay.Close(ctx)
+	}
+
 	proxy.OnRequest().DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		// Recovery from http.ErrAbortHandler to avoid log noise in goproxy
+		defer func() {
+			if rec := recover(); rec != nil {
+				if rec != http.ErrAbortHandler {
+					sysLog.Error().Interface("panic", rec).Msg("recovered from panic in OnRequest")
+				}
+			}
+		}()
+
 		requestID := uuid.New().String()
 		ctx.UserData = map[string]interface{}{
 			"request_id": requestID,
 			"start_time": time.Now(),
 		}
 
+		// WebSocket interception: rewrite to internal relay for safe redaction.
+		if wsRelay != nil {
+			wsRelay.RewriteRequest(r, requestID)
+		}
+
+		// Handle normal HTTP Request redaction
 		var requestBody []byte
-		if r.Body != nil {
+		if r.Body != nil && r.ContentLength > 0 && r.ContentLength < 10*1024*1024 {
 			var err error
 			requestBody, err = io.ReadAll(r.Body)
 			if err == nil {
@@ -67,10 +90,9 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 				reqCtx = context.WithValue(reqCtx, ctxkeys.Path, r.URL.Path)
 				reqCtx = context.WithValue(reqCtx, ctxkeys.Method, r.Method)
 
-				// Skip redaction if rdr is nil
 				if rdr != nil {
-					redacted, err := rdr.RedactRequest(reqCtx, requestBody)
-					if err == nil {
+					redacted, changed, err := rdr.RedactRequest(reqCtx, requestBody)
+					if err == nil && changed {
 						r.Body = io.NopCloser(bytes.NewReader(redacted))
 						r.ContentLength = int64(len(redacted))
 						requestBody = redacted
@@ -84,35 +106,34 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 		}
 
 		ctx.UserData.(map[string]interface{})["request_body"] = requestBody
-
 		return r, nil
 	})
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		// Short-circuit for hijacked/aborted requests
+		if resp == nil || resp.StatusCode == http.StatusSwitchingProtocols {
+			return resp
+		}
+
 		userData := ctx.UserData.(map[string]interface{})
 		requestID := userData["request_id"].(string)
 		startTime := userData["start_time"].(time.Time)
-		requestBody := userData["request_body"].([]byte)
+		requestBody, _ := userData["request_body"].([]byte)
 
 		var responseBody []byte
-		if resp != nil && resp.Body != nil {
-			contentType := strings.ToLower(resp.Header.Get("Content-Type"))
-			isStream := strings.Contains(contentType, "text/event-stream") ||
-				strings.Contains(contentType, "application/x-ndjson") ||
-				strings.Contains(contentType, "application/stream+json") ||
-				strings.Contains(contentType, "application/jsonl")
+		contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+		isStream := strings.Contains(contentType, "text/event-stream") ||
+			strings.Contains(contentType, "application/x-ndjson") ||
+			strings.Contains(contentType, "application/stream+json") ||
+			strings.Contains(contentType, "application/jsonl")
 
-			// For streaming responses, we do not read or buffer the body to maintain true zero-latency.
-			// We only read normal, discrete responses to log them.
-			if !isStream {
-				const maxLogSize = 1024 * 1024 // 1 MB limit for logging
-				limitReader := io.LimitReader(resp.Body, maxLogSize)
-				var err error
-				responseBody, err = io.ReadAll(limitReader)
-				if err == nil {
-					// Stitch the unread part back with the read part to avoid breaking the client.
-					resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(responseBody), resp.Body))
-				}
+		if resp.Body != nil && !isStream {
+			const maxLogSize = 1024 * 1024
+			limitReader := io.LimitReader(resp.Body, maxLogSize)
+			var err error
+			responseBody, err = io.ReadAll(limitReader)
+			if err == nil {
+				resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(responseBody), resp.Body))
 			}
 		}
 
@@ -131,5 +152,5 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 		return resp
 	})
 
-	return proxy
+	return proxy, closeRelay
 }
