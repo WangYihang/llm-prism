@@ -30,7 +30,7 @@ regex = "(?<=secret:)[a-z]+"
 	}
 	defer func() { _ = os.Remove(tmpFile) }()
 
-	r, err := New(tmpFile, zerolog.Nop())
+	r, err := New(tmpFile, zerolog.Nop(), zerolog.Nop())
 	if err != nil {
 		t.Fatalf("Failed to create redactor: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestConfigLoadFallback(t *testing.T) {
 	tmpFile := "test_rules.json"
 	_ = os.WriteFile(tmpFile, []byte(jsonConfig), 0644)
 	defer func() { _ = os.Remove(tmpFile) }()
-	r2, err := New(tmpFile, zerolog.Nop())
+	r2, err := New(tmpFile, zerolog.Nop(), zerolog.Nop())
 	if err != nil || len(r2.config.Rules) != 2 {
 		t.Errorf("Failed to load JSON config (expected 1 config + 1 default): %v, got count %d", err, len(r2.config.Rules))
 	}

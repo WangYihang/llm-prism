@@ -34,7 +34,7 @@ func Run(cli *config.CLI, logs *logging.Loggers) {
 }
 
 func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int) (*redactor.Redactor, string, context.CancelFunc, error) {
-	rdr, err := redactor.New(cli.RedactorRules, logs.Detection)
+	rdr, err := redactor.New(cli.RedactorRules, logs.System, logs.Detection)
 	if err != nil {
 		logs.System.Warn().Err(err).Msg("failed to load redactor rules, skipping redaction")
 		rdr = nil

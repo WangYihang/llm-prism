@@ -47,7 +47,7 @@ func (r *Redactor) SetLogPaths(app, traffic, detection string) {
 	r.detectionLogPath = detection
 }
 
-func New(configPath string, logs zerolog.Logger) (*Redactor, error) {
+func New(configPath string, sysLog, detectionLog zerolog.Logger) (*Redactor, error) {
 	var data []byte
 	var err error
 
@@ -60,7 +60,7 @@ func New(configPath string, logs zerolog.Logger) (*Redactor, error) {
 	}
 
 	if len(data) == 0 {
-		logs.Info().Msg("using built-in gitleaks default rules")
+		sysLog.Debug().Msg("using built-in gitleaks default rules")
 		data = []byte(gitleaksconfig.DefaultConfig)
 	}
 
@@ -90,6 +90,7 @@ func New(configPath string, logs zerolog.Logger) (*Redactor, error) {
 		compatibleRules = append(compatibleRules, rule)
 	}
 	config.Rules = compatibleRules
+	gitleaksCount := len(config.Rules)
 
 	// Add DeepSeek specific rule as it is often missing from Gitleaks
 	deepseekRegex := regexp.MustCompile(`sk-[a-f0-9]{32}`)
@@ -99,6 +100,13 @@ func New(configPath string, logs zerolog.Logger) (*Redactor, error) {
 		Regex:       deepseekRegex,
 		RawRegex:    deepseekRegex.String(),
 	})
+	customCount := len(config.Rules) - gitleaksCount
+
+	sysLog.Info().
+		Int("gitleaks", gitleaksCount).
+		Int("custom", customCount).
+		Int("total", len(config.Rules)).
+		Msg("redaction rules loaded")
 
 	detectors := []Detector{
 		NewRegexDetector(config.Rules),
@@ -108,7 +116,7 @@ func New(configPath string, logs zerolog.Logger) (*Redactor, error) {
 
 	return &Redactor{
 		config:    &config,
-		logs:      logs,
+		logs:      detectionLog,
 		detectors: detectors,
 	}, nil
 }
