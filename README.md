@@ -35,6 +35,6 @@ llm-redactor exec -- codex
 
 ### Exit
 
-When you exit the ai coding agent, llm-redactor will output a brief summary of the detected leaks shows in the following figure, a secret key is detected and redacted for two times, all logs are stored in `llm-redactor-detections.jsonl`.
+Upon exiting your session, **LLM-Redactor** displays a comprehensive audit summary (as shown below). All detected leaks are logged to `llm-redactor-detections.jsonl` with full metadata for post-session review.
 
-![Protected Request](./figures/02.png)
+![Summary](./figures/summary.png)
