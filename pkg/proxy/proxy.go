@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -38,7 +39,45 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 		sysLog.Info().Str("path", caPath).Msg("session CA certificate generated and applied")
 	}
 
-	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	// Intercept only known LLM domains to avoid breaking binary updates and other non-LLM traffic
+	llmDomains := []string{
+		"anthropic.com",
+		"openai.com",
+		"chatgpt.com",
+		"googleapis.com",
+		"deepseek.com",
+		"moonshot.cn",
+		"mistral.ai",
+		"groq.com",
+		"openrouter.ai",
+		"together.xyz",
+		"perplex.ity",
+		"perplexity.ai",
+	}
+
+	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		hostname, _, err := net.SplitHostPort(host)
+		if err != nil {
+			hostname = host
+		}
+		hostname = strings.ToLower(hostname)
+
+		shouldIntercept := false
+		for _, domain := range llmDomains {
+			if hostname == domain || strings.HasSuffix(hostname, "."+domain) {
+				shouldIntercept = true
+				break
+			}
+		}
+
+		if shouldIntercept {
+			sysLog.Debug().Str("host", host).Msg("intercepting LLM traffic (MITM)")
+			return goproxy.MitmConnect, host
+		}
+
+		sysLog.Debug().Str("host", host).Msg("passing through non-LLM traffic (Tunnel)")
+		return goproxy.OkConnect, host
+	})
 
 	wsLog, closeWSLog := newWebSocketLogger(sessionDir, sysLog)
 	var wsRelay *WebSocketRelay
