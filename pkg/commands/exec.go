@@ -34,9 +34,6 @@ func Exec(cli *config.CLI, logs *logging.Loggers) {
 		}
 	}()
 
-	// Wait a bit for the proxy to be ready
-	time.Sleep(200 * time.Millisecond)
-
 	// Determine the proxy URL
 	proxyHost := cli.Exec.Host
 	if proxyHost == "0.0.0.0" || proxyHost == "127.0.0.1" || proxyHost == "::1" {
@@ -48,6 +45,10 @@ func Exec(cli *config.CLI, logs *logging.Loggers) {
 		port = strings.Split(addr, ":")[len(strings.Split(addr, ":"))-1]
 	}
 	proxyURL := fmt.Sprintf("http://%s:%s", proxyHost, port)
+
+	if err := waitForProxy(proxyHost, port, 3*time.Second); err != nil {
+		logs.System.Fatal().Err(err).Msg("proxy did not become ready")
+	}
 
 	// Prepare environment variables
 	env := os.Environ()
@@ -118,4 +119,22 @@ func Exec(cli *config.CLI, logs *logging.Loggers) {
 		}
 		logs.System.Fatal().Err(err).Msg("command failed")
 	}
+}
+
+func waitForProxy(host, port string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 200*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		lastErr = err
+		time.Sleep(50 * time.Millisecond)
+	}
+	if lastErr == nil {
+		return fmt.Errorf("proxy not ready")
+	}
+	return lastErr
 }
