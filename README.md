@@ -4,6 +4,29 @@ A lightweight, transparent reverse proxy for LLM API observability and security.
 
 > **Note**: Optimized for DeepSeek and Anthropic-style APIs, but designed to be provider-agnostic.
 
+## 🛡️ Privacy at a Glance
+
+`llm-prism` acts as a local security barrier. Here is the difference it makes when you accidentally paste a secret into your AI chat:
+
+| Feature | 🔴 Without llm-prism (Direct) | 🟢 With llm-prism (Protected) |
+| :--- | :--- | :--- |
+| **Privacy** | Secrets leave your machine | **Redacted locally** before sending |
+| **Cloud Provider Sees** | `... key is sk-7dd4...363e` | `... key is [REDACTED_SECRET]` |
+| **Security Audit** | No record of the leak | **Local log** with rule-ID & timestamp |
+| **Data Integrity** | Risks account compromise | Zero-leak guarantee |
+| **SSE Streaming** | Normal | **Filtered in real-time** (Zero-latency) |
+
+### Traffic Comparison:
+
+**Input Prompt (from your CLI/IDE):**
+```json
+{ "messages": [{ "role": "user", "content": "My AWS key is AKIA1234567890EXAMPLE" }] }
+```
+
+**What the LLM Provider (Cloud) Receives:**
+- **🔴 Direct:** `{ "content": "My AWS key is AKIA1234567890EXAMPLE" }` ⚠️ **LEAKED!**
+- **🟢 Via llm-prism:** `{ "content": "My AWS key is [REDACTED_SECRET]" }` ✅ **SECURE!**
+
 ## Features
 
 - **🛡️ Automatic Secret Redaction**: Automatically detects and redacts secrets (API keys, tokens, etc.) from request bodies and streaming responses using Gitleaks-compatible rules.
@@ -66,39 +89,6 @@ export ANTHROPIC_BASE_URL=http://localhost:4000
 export ANTHROPIC_AUTH_TOKEN=anything  # The proxy handles the real authentication
 claude
 ```
-
-## Privacy Protection Comparison
-
-When you use `llm-prism`, sensitive information is intercepted and redacted **locally** before it ever leaves your machine.
-
-### 🔴 Without llm-prism (Direct Connection)
-Your sensitive data is sent directly to the LLM provider's servers.
-```json
-// PAYLOAD SENT TO PROVIDER
-{
-  "messages": [
-    {
-      "role": "user",
-      "content": "My DeepSeek key is sk-7dd4d43022ee4cc29ace0eecb7d3363e"
-    }
-  ]
-}
-```
-
-### 🟢 With llm-prism (Protected)
-Sensitive data is identified and replaced with a placeholder. The provider only sees the redacted version.
-```json
-// PAYLOAD SENT TO PROVIDER
-{
-  "messages": [
-    {
-      "role": "user",
-      "content": "My DeepSeek key is [REDACTED_SECRET]"
-    }
-  ]
-}
-```
-*The original secret is still captured in your **local** detection logs for auditing purposes, but it never reaches the provider.*
 
 ## Security & Redaction
 
