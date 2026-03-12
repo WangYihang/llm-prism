@@ -60,6 +60,13 @@ func New(appLogFile, trafficLogFile, detectionLogFile string) *Loggers {
 		Timestamp().
 		Logger()
 
+	if trafficFile == nil {
+		trafficFile = os.Stderr
+	}
+	if detectionFile == nil {
+		detectionFile = os.Stderr
+	}
+
 	trafficLog := zerolog.New(trafficFile).
 		With().
 		Timestamp().
