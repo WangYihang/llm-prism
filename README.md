@@ -1,29 +1,28 @@
-# 🌈 llm-prism
+# llm-prism
 
-**The Privacy Firewall for LLMs.** Stop leaking secrets (API Keys, PII) to AI providers.
-
-`llm-prism` is a local transparent proxy that redacts sensitive information **locally** before it ever leaves your machine.
+A local transparent proxy to redact secrets (API keys, PII) before they leave your machine.
 
 ---
 
-| Feature | 🔴 Direct Connection | 🟢 With llm-prism |
+| Feature | Direct Connection | With llm-prism |
 | :--- | :--- | :--- |
-| **Data Privacy** | Secrets sent to Cloud | **Redacted Locally** |
+| **Data Privacy** | Secrets sent to Cloud | **Redacted locally** |
 | **Provider Sees** | `key: "sk-7d...363e"` | `key: "[REDACTED]"` |
 | **Streaming** | Standard | **Real-time filtering** |
 
 ---
 
-## 🚀 Quick Start (30s)
+## Quick Start
 
 ### 1. Install
 ```bash
 go install github.com/wangyihang/llm-prism@latest
 ```
 
-### 2. Setup
+### 2. Setup Rules
+Update your local redirection rules from the official Gitleaks repository:
 ```bash
-llm-prism sync  # Update redaction rules (Gitleaks compatible)
+llm-prism sync
 ```
 
 ### 3. Run
@@ -34,9 +33,9 @@ llm-prism run
 
 ---
 
-## 🛠️ Integration
+## Integration
 
-Connect your favorite tools by changing the API Base URL:
+Point your LLM client's base URL to `http://localhost:4000`.
 
 ### Claude Code
 ```bash
@@ -45,27 +44,18 @@ claude
 ```
 
 ### Cursor / Aider / OpenAI SDK
-Simply point your `base_url` to `http://localhost:4000`.
+Set the API base URL in your configuration to `http://localhost:4000`.
 
 ---
 
-## ✨ Features
+## Core Features
 
-- **🛡️ Auto-Redaction**: Detects 100+ secret types (AWS, Stripe, OpenAI, etc.).
-- **⚡ Zero Latency**: Specialized SSE engine for real-time streaming.
-- **🔍 Deep Scan**: Recursively traverses nested JSON (works with Claude's thinking blocks).
-- **📊 Local Audit**: Keeps a `llm-prism-detections.jsonl` for your own security review.
-
----
-
-## 📖 How it works
-
-1. **Intercept**: Sits between your CLI/IDE and the LLM API.
-2. **Sanitize**: Scans the request body against Gitleaks-compatible rules.
-3. **Redact**: Replaces any matched secrets with `[REDACTED_SECRET]`.
-4. **Forward**: Sends the "clean" request to the provider.
+- **Automatic Redaction**: Detects 100+ secret types using Gitleaks-compatible rules.
+- **Zero-Latency Streaming**: Intercepts and filters SSE streams in real-time.
+- **Deep JSON Scanning**: Recursively traverses nested structures (e.g., Anthropic content blocks).
+- **Local Audit**: Records detected leaks to `llm-prism-detections.jsonl`.
 
 ---
 
 ## License
-MIT. See `LICENSE` for details.
+MIT
