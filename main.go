@@ -44,8 +44,6 @@ func main() {
 	switch strings.Split(ctx.Command(), " ")[0] {
 	case "version":
 		fmt.Println(version.GetVersionInfo().JSON())
-	case "sync":
-		commands.Sync(&cli, logs)
 	case "run":
 		commands.Run(&cli, logs)
 	case "exec":

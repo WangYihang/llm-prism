@@ -18,9 +18,5 @@ type CLI struct {
 		Command []string `arg:"" help:"Command to execute"`
 	} `cmd:"" help:"Execute a command through the proxy"`
 
-	Sync struct {
-		URL string `help:"Gitleaks rules URL" default:"https://raw.githubusercontent.com/gitleaks/gitleaks/master/config/gitleaks.toml"`
-	} `cmd:"" help:"Sync rules from Gitleaks official repository"`
-
 	Version struct{} `cmd:"" help:"Version"`
 }

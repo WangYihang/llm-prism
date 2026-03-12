@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	gitleaksconfig "github.com/zricethezav/gitleaks/v8/config"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
@@ -20,7 +20,6 @@ import (
 
 const (
 	RedactedPlaceholder = "REDACTED_SECRET"
-	DefaultRulesURL     = "https://raw.githubusercontent.com/gitleaks/gitleaks/master/config/gitleaks.toml"
 )
 
 type DetectionDetail struct {
@@ -48,47 +47,21 @@ func (r *Redactor) SetLogPaths(app, traffic, detection string) {
 	r.detectionLogPath = detection
 }
 
-func DownloadRules(path string, url string, logs zerolog.Logger) error {
-	if url == "" {
-		url = DefaultRulesURL
-	}
-	path = utils.ExpandTilde(path)
-	logs.Info().Str("url", url).Str("path", path).Msg("downloading redaction rules")
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("failed to download rules: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to save rules: %w", err)
-	}
-	return nil
-}
-
 func New(configPath string, logs zerolog.Logger) (*Redactor, error) {
-	configPath = utils.ExpandTilde(configPath)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logs.Warn().Msg("redaction rules not found, attempting automatic download")
-			if err := DownloadRules(configPath, "", logs); err != nil {
-				return nil, fmt.Errorf("failed to automatically download rules: %w", err)
-			}
-			// Re-read after download
-			data, err = os.ReadFile(configPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read downloaded rules: %w", err)
-			}
-		} else {
+	var data []byte
+	var err error
+
+	if configPath != "" {
+		configPath = utils.ExpandTilde(configPath)
+		data, err = os.ReadFile(configPath)
+		if err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("failed to read config: %w", err)
 		}
+	}
+
+	if len(data) == 0 {
+		logs.Info().Msg("using built-in gitleaks default rules")
+		data = []byte(gitleaksconfig.DefaultConfig)
 	}
 
 	var config Config
