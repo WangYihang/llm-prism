@@ -171,7 +171,7 @@ func TestValidateRelayToken(t *testing.T) {
 }
 
 func TestBuildRelayContext(t *testing.T) {
-	base := buildRelayContext(nil, "req-1", mustParseURL(t, "http://example.com/path"))
+	base := buildRelayContext(context.Background(), "req-1", mustParseURL(t, "http://example.com/path"))
 	if ctxkeys.GetString(base, ctxkeys.RequestID) != "req-1" {
 		t.Fatal("expected request id")
 	}

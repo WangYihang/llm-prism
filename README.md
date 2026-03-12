@@ -4,9 +4,9 @@ A local transparent proxy to redact secrets (API keys, PII) before they leave yo
 
 | Feature | Direct Connection | With llm-prism |
 | :--- | :--- | :--- |
-| Data Privacy | Secrets sent to Cloud | Redacted locally |
-| Provider Sees | `key: "sk-0a6916c7e8693709f204d8ad8d027634"` | `key: "[REDACTED]"` |
-| Streaming | Standard | Real-time filtering |
+| Data Privacy | Secrets sent to Cloud | **Redacted locally** |
+| Provider Sees | `Prompt: "Fix this: API_KEY=sk-123..."` | `Prompt: "Fix this: API_KEY=[REDACTED]"` |
+| Streaming | Standard | **Real-time filtering** |
 
 ## Core Features
 
