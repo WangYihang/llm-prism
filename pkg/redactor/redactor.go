@@ -215,7 +215,7 @@ func (r *Redactor) Close() {
 // to the background processor asynchronously.
 func (r *Redactor) RedactContent(ctx context.Context, content string) string {
 	for _, detector := range r.detectors {
-		content = detector.Redact(content, func(match, ruleID, description string) string {
+		content = detector.Redact(ctx, content, func(match, ruleID, description string) string {
 			// Check global allow list (must stay synchronous — affects return value)
 			for _, allow := range r.config.AllowList {
 				if match == allow {

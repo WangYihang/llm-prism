@@ -1,6 +1,9 @@
 package detectors
 
-import "regexp"
+import (
+	"context"
+	"regexp"
+)
 
 type RegexRule struct {
 	ID          string
@@ -20,7 +23,7 @@ func (d *RegexDetector) Type() string {
 	return "regex"
 }
 
-func (d *RegexDetector) Redact(content string, callback RedactionCallback) string {
+func (d *RegexDetector) Redact(ctx context.Context, content string, callback RedactionCallback) string {
 	for _, rule := range d.rules {
 		content = rule.Regex.ReplaceAllStringFunc(content, func(match string) string {
 			if len(match) == 0 {

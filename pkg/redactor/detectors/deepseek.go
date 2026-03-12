@@ -1,6 +1,9 @@
 package detectors
 
-import "regexp"
+import (
+	"context"
+	"regexp"
+)
 
 type DeepSeekDetector struct {
 	regex *regexp.Regexp
@@ -16,7 +19,7 @@ func (d *DeepSeekDetector) Type() string {
 	return "deepseek"
 }
 
-func (d *DeepSeekDetector) Redact(content string, callback RedactionCallback) string {
+func (d *DeepSeekDetector) Redact(ctx context.Context, content string, callback RedactionCallback) string {
 	return d.regex.ReplaceAllStringFunc(content, func(match string) string {
 		return callback(match, "deepseek-api-key", "DeepSeek API Key")
 	})

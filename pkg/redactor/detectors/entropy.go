@@ -1,9 +1,12 @@
 package detectors
 
 import (
+	"context"
 	"math"
 	"regexp"
 	"strings"
+
+	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
 )
 
 type EntropyDetector struct {
@@ -32,7 +35,12 @@ func (d *EntropyDetector) Type() string {
 	return "entropy"
 }
 
-func (d *EntropyDetector) Redact(content string, callback RedactionCallback) string {
+func (d *EntropyDetector) Redact(ctx context.Context, content string, callback RedactionCallback) string {
+	host := ctxkeys.GetString(ctx, ctxkeys.Host)
+	if strings.Contains(host, "googleapis.com") || strings.Contains(host, "cloudaicompanion") || strings.Contains(host, "gemini") {
+		return content
+	}
+
 	return d.regex.ReplaceAllStringFunc(content, func(match string) string {
 		if len(match) < d.minLen {
 			return match
