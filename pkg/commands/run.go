@@ -7,6 +7,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,18 +24,27 @@ func Run(cli *config.CLI, logs *logging.Loggers) {
 	if cli.Run.ApiKey == "" {
 		logs.System.Fatal().Msg("API Key is required for the 'run' command. Use --api-key or LLM_PRISM_API_KEY environment variable.")
 	}
-	_, _, err := StartProxy(cli, logs, cli.Run.Host, cli.Run.Port, cli.Run.ApiURL, cli.Run.ApiKey, cli.Run.Provider)
+	rdr, _, _, err := StartProxy(cli, logs, cli.Run.Host, cli.Run.Port, cli.Run.ApiURL, cli.Run.ApiKey, cli.Run.Provider)
 	if err != nil {
 		logs.System.Fatal().Err(err).Msg("failed to start proxy")
 	}
-	// Run indefinitely
-	select {}
+
+	// Handle signals for graceful shutdown and summary
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	if rdr != nil {
+		fmt.Println(rdr.Summary())
+	}
 }
 
-func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, apiURL, apiKey, provider string) (string, context.CancelFunc, error) {
+func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, apiURL, apiKey, provider string) (*redactor.Redactor, string, context.CancelFunc, error) {
 	rdr, err := redactor.New(cli.RedactorRules, logs.Detection)
 	if err != nil {
 		logs.System.Warn().Err(err).Msg("failed to load redactor rules, skipping redaction")
+	} else {
+		rdr.SetLogPaths(cli.AppLogFile, cli.TrafficLogFile, cli.DetectionLogFile)
 	}
 
 	// Setup local variable overrides
@@ -43,7 +55,7 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, a
 
 	rp, err := proxy.Setup(&tempCLI, rdr, logs)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to setup reverse proxy: %w", err)
+		return nil, "", nil, fmt.Errorf("failed to setup reverse proxy: %w", err)
 	}
 
 	addr := fmt.Sprintf("%s:%d", host, port)
@@ -77,7 +89,7 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, a
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return "", nil, err
+		return nil, "", nil, err
 	}
 
 	go func() {
@@ -88,7 +100,7 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, a
 
 	logs.System.Info().Str("addr", addr).Msg("proxy started")
 
-	return addr, func() {
+	return rdr, addr, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 		_ = server.Shutdown(ctx)

@@ -37,6 +37,10 @@ func main() {
 	logs := logging.New(appLogPath, trafficLogPath, detectionLogPath)
 	logs.System.Info().Str("session_id", sessionID).Str("log_dir", sessionDir).Msg("session started")
 
+	cli.AppLogFile = appLogPath
+	cli.TrafficLogFile = trafficLogPath
+	cli.DetectionLogFile = detectionLogPath
+
 	switch strings.Split(ctx.Command(), " ")[0] {
 	case "version":
 		fmt.Println(version.GetVersionInfo().JSON())

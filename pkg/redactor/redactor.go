@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
@@ -19,10 +21,29 @@ const (
 	DefaultRulesURL     = "https://raw.githubusercontent.com/gitleaks/gitleaks/master/config/gitleaks.toml"
 )
 
+type DetectionDetail struct {
+	RequestID     string
+	DetectorType  string
+	RuleID        string
+	MaskedContent string
+}
+
 type Redactor struct {
-	config    *Config
-	logs      zerolog.Logger
-	detectors []Detector
+	config           *Config
+	logs             zerolog.Logger
+	detectors        []Detector
+	stats            sync.Map // detector_type -> *int64
+	details          []DetectionDetail
+	mu               sync.Mutex
+	appLogPath       string
+	trafficLogPath   string
+	detectionLogPath string
+}
+
+func (r *Redactor) SetLogPaths(app, traffic, detection string) {
+	r.appLogPath = app
+	r.trafficLogPath = traffic
+	r.detectionLogPath = detection
 }
 
 func DownloadRules(path string, url string, logs zerolog.Logger) error {
@@ -139,10 +160,91 @@ func (r *Redactor) RedactContent(content string, context map[string]string) stri
 			}
 			evt.Msg("secret detected")
 
+			// Update stats
+			actual, _ := r.stats.LoadOrStore(detector.Type(), new(int64))
+			atomic.AddInt64(actual.(*int64), 1)
+
+			// Record details (de-duplicated by RequestID, DetectorType, RuleID, MaskedContent)
+			r.mu.Lock()
+			found := false
+			reqID := context["request_id"]
+			masked := mask(match)
+			for _, d := range r.details {
+				if d.RequestID == reqID && d.DetectorType == detector.Type() && d.RuleID == ruleID && d.MaskedContent == masked {
+					found = true
+					break
+				}
+			}
+			if !found {
+				r.details = append(r.details, DetectionDetail{
+					RequestID:     reqID,
+					DetectorType:  detector.Type(),
+					RuleID:        ruleID,
+					MaskedContent: masked,
+				})
+			}
+			r.mu.Unlock()
+
 			return RedactedPlaceholder
 		})
 	}
 	return content
+}
+
+func (r *Redactor) GetStats() map[string]int64 {
+	res := make(map[string]int64)
+	r.stats.Range(func(key, value interface{}) bool {
+		res[key.(string)] = atomic.LoadInt64(value.(*int64))
+		return true
+	})
+	return res
+}
+
+func (r *Redactor) Summary() string {
+	stats := r.GetStats()
+	var sb strings.Builder
+
+	sb.WriteString("\n[Log File Locations]\n")
+	sb.WriteString(fmt.Sprintf("- App Log:       %s\n", r.appLogPath))
+	sb.WriteString(fmt.Sprintf("- Traffic Log:   %s\n", r.trafficLogPath))
+	sb.WriteString(fmt.Sprintf("- Detection Log: %s\n", r.detectionLogPath))
+
+	if len(stats) == 0 {
+		sb.WriteString("\n[Summary] No secrets detected. Your data is clean!\n")
+		return sb.String()
+	}
+
+	sb.WriteString("\n[Redactor Stats Summary]\n")
+	sb.WriteString("+-----------------------+---------------+\n")
+	sb.WriteString("| Detector Type         | Total Matches |\n")
+	sb.WriteString("+-----------------------+---------------+\n")
+
+	var total int64
+	for k, v := range stats {
+		sb.WriteString(fmt.Sprintf("| %-21s | %-13d |\n", k, v))
+		total += v
+	}
+
+	sb.WriteString("+-----------------------+---------------+\n")
+	sb.WriteString(fmt.Sprintf("| %-21s | %-13d |\n", "TOTAL PROTECTED", total))
+	sb.WriteString("+-----------------------+---------------+\n")
+
+	sb.WriteString("\n[Redactor Detection Details]\n")
+	sb.WriteString("+------------------+----------+-----------------------+---------------+\n")
+	sb.WriteString("| Request ID       | Detector | Rule ID               | Masked Value  |\n")
+	sb.WriteString("+------------------+----------+-----------------------+---------------+\n")
+	r.mu.Lock()
+	for _, d := range r.details {
+		reqIDShort := d.RequestID
+		if len(reqIDShort) > 16 {
+			reqIDShort = reqIDShort[:16]
+		}
+		sb.WriteString(fmt.Sprintf("| %-16s | %-8s | %-21s | %-13s |\n", reqIDShort, d.DetectorType, d.RuleID, d.MaskedContent))
+	}
+	r.mu.Unlock()
+	sb.WriteString("+------------------+----------+-----------------------+---------------+\n")
+
+	return sb.String()
 }
 
 // RedactValue recursively traverses a JSON-compatible structure and redacts all string values

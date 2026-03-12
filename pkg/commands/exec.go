@@ -20,11 +20,16 @@ func Exec(cli *config.CLI, logs *logging.Loggers) {
 	}
 
 	// Start the proxy
-	addr, closeProxy, err := StartProxy(cli, logs, cli.Exec.Host, cli.Exec.Port, cli.Exec.ApiURL, cli.Exec.ApiKey, cli.Exec.Provider)
+	rdr, addr, closeProxy, err := StartProxy(cli, logs, cli.Exec.Host, cli.Exec.Port, cli.Exec.ApiURL, cli.Exec.ApiKey, cli.Exec.Provider)
 	if err != nil {
 		logs.System.Fatal().Err(err).Msg("failed to start proxy")
 	}
-	defer closeProxy()
+	defer func() {
+		closeProxy()
+		if rdr != nil {
+			fmt.Println(rdr.Summary())
+		}
+	}()
 
 	// Wait a bit for the proxy to be ready
 	time.Sleep(200 * time.Millisecond)
