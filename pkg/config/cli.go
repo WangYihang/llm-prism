@@ -1,7 +1,7 @@
 package config
 
 type CLI struct {
-	BaseLogDir       string `help:"Base log directory" env:"LLM_PRISM_LOG_DIR" default:"~/.llm-prism"`
+	BaseLogDir       string `help:"Base log directory" env:"LLM_PRISM_LOG_DIR" default:"~/.llm-redactor"`
 	AppLogFile       string `help:"Application log file" env:"LLM_PRISM_APP_LOG_FILE" default:"app.jsonl"`
 	TrafficLogFile   string `help:"Traffic log file" env:"LLM_PRISM_TRAFFIC_LOG_FILE" default:"traffic.jsonl"`
 	DetectionLogFile string `help:"Detection log file" env:"LLM_PRISM_DETECTION_LOG_FILE" default:"detections.jsonl"`

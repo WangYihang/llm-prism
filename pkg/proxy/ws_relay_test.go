@@ -10,7 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/rs/zerolog"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 func TestParseRelayTarget(t *testing.T) {

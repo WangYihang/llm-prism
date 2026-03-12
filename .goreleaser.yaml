@@ -6,10 +6,10 @@ before:
     - go generate ./...
 
 builds:
-  - id: llm-prism
+  - id: llm-redactor
     env:
       - CGO_ENABLED=0
-    binary: llm-prism
+    binary: llm-redactor
     goos:
       - linux
       - windows
@@ -17,9 +17,9 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X github.com/wangyihang/llm-prism/pkg/version.Version={{.Version}}
-      - -X github.com/wangyihang/llm-prism/pkg/version.Commit={{.Commit}}
-      - -X github.com/wangyihang/llm-prism/pkg/version.Date={{.Date}}
+      - -X github.com/wangyihang/llm-redactor/pkg/version.Version={{.Version}}
+      - -X github.com/wangyihang/llm-redactor/pkg/version.Commit={{.Commit}}
+      - -X github.com/wangyihang/llm-redactor/pkg/version.Date={{.Date}}
 
 archives:
   - formats: [tar.gz]
@@ -48,12 +48,12 @@ release:
 report_sizes: true
 
 dockers_v2:
-  - id: llm-prism
+  - id: llm-redactor
     dockerfile: "Dockerfile"
     ids:
-      - llm-prism
+      - llm-redactor
     images:
-      - "ghcr.io/wangyihang/llm-prism"
+      - "ghcr.io/wangyihang/llm-redactor"
     tags:
       - "v{{ .Version }}"
       - "{{ if .IsNightly }}nightly{{ end }}"

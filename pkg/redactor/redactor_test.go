@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
-	"github.com/wangyihang/llm-prism/pkg/redactor/detectors"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/redactor/detectors"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 // newTestRedactor creates a Redactor with a running background goroutine,

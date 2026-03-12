@@ -9,16 +9,16 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/google/uuid"
-	"github.com/wangyihang/llm-prism/pkg/commands"
-	"github.com/wangyihang/llm-prism/pkg/config"
-	"github.com/wangyihang/llm-prism/pkg/utils"
-	"github.com/wangyihang/llm-prism/pkg/utils/logging"
-	"github.com/wangyihang/llm-prism/pkg/utils/version"
+	"github.com/wangyihang/llm-redactor/pkg/commands"
+	"github.com/wangyihang/llm-redactor/pkg/config"
+	"github.com/wangyihang/llm-redactor/pkg/utils"
+	"github.com/wangyihang/llm-redactor/pkg/utils/logging"
+	"github.com/wangyihang/llm-redactor/pkg/utils/version"
 )
 
 func main() {
 	var cli config.CLI
-	ctx := kong.Parse(&cli, kong.Name("llm-prism"), kong.UsageOnError())
+	ctx := kong.Parse(&cli, kong.Name("llm-redactor"), kong.UsageOnError())
 
 	// Session Setup
 	sessionID := fmt.Sprintf("%s-%s", time.Now().Format("20060102-150405"), uuid.New().String()[:8])

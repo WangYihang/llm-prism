@@ -13,12 +13,12 @@ import (
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 const (
-	wsRelayTargetHeader = "X-LLM-Prism-WS-Target"
-	wsRelayTokenHeader  = "X-LLM-Prism-WS-Token"
+	wsRelayTargetHeader = "X-LLM-Redactor-WS-Target"
+	wsRelayTokenHeader  = "X-LLM-Redactor-WS-Token"
 )
 
 type WebSocketRelay struct {

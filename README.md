@@ -1,8 +1,8 @@
-# llm-prism
+# llm-redactor
 
 A local transparent proxy to redact secrets (API keys, PII) before they leave your machine.
 
-| Feature | Direct Connection | With llm-prism |
+| Feature | Direct Connection | With llm-redactor |
 | :--- | :--- | :--- |
 | Data Privacy | Secrets sent to Cloud | **Redacted locally** |
 | Provider Sees | `Prompt: "Fix this: API_KEY=sk-123..."` | `Prompt: "Fix this: API_KEY=[REDACTED]"` |
@@ -13,32 +13,32 @@ A local transparent proxy to redact secrets (API keys, PII) before they leave yo
 - Automatic Redaction: Detects 100+ secret types using Gitleaks-compatible rules.
 - Zero-Latency Streaming: Intercepts and filters SSE streams in real-time.
 - Deep JSON Scanning: Recursively traverses nested structures (e.g., Anthropic content blocks).
-- Local Audit: Records detected leaks to `llm-prism-detections.jsonl`.
+- Local Audit: Records detected leaks to `llm-redactor-detections.jsonl`.
 
 ## Quick Start
 
 ### Install
 
 ```bash
-go install github.com/wangyihang/llm-prism@latest
+go install github.com/wangyihang/llm-redactor@latest
 ```
 
 ### Run
 
 ```bash
-llm-prism exec -- claude
+llm-redactor exec -- claude
 ```
 
 ## Example: Preventing Credential Leaks
 
 **Scenario:** You have a `DEEPSEEK_API_KEY` stored in your environment and accidentally ask Claude to *"Summarize my .env file"*.
 
-**Without `llm-prism`:** Your sensitive API keys are sent directly to the LLM provider.
+**Without `llm-redactor`:** Your sensitive API keys are sent directly to the LLM provider.
 
 ![Insecure Request](./figures/01.png)
 
-**With `llm-prism` active:** The proxy intercepts the request and redacts secrets locally before they ever leave your machine.
+**With `llm-redactor` active:** The proxy intercepts the request and redacts secrets locally before they ever leave your machine.
 
 ![Protected Request](./figures/02.png)
 
-All detections are logged locally to `llm-prism-detections.jsonl` for easy auditing.
+All detections are logged locally to `llm-redactor-detections.jsonl` for easy auditing.

@@ -15,4 +15,4 @@ demo:
 
 # Clean up temporary logs
 clean-logs:
-	rm -f llm-prism.jsonl llm-prism-detections.jsonl
+	rm -f llm-redactor.jsonl llm-redactor-detections.jsonl

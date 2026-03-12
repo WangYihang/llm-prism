@@ -13,7 +13,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 // proxyLogWriter implements io.Writer to adapt standard library log to zerolog.

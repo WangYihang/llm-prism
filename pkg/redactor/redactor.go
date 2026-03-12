@@ -14,9 +14,9 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
-	"github.com/wangyihang/llm-prism/pkg/redactor/detectors"
-	"github.com/wangyihang/llm-prism/pkg/utils"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/redactor/detectors"
+	"github.com/wangyihang/llm-redactor/pkg/utils"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 const (

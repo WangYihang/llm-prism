@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 func TestShannonEntropy(t *testing.T) {

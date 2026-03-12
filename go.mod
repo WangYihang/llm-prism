@@ -1,4 +1,4 @@
-module github.com/wangyihang/llm-prism
+module github.com/wangyihang/llm-redactor
 
 go 1.25.4
 

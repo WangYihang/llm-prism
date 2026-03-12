@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wangyihang/llm-prism/pkg/config"
-	"github.com/wangyihang/llm-prism/pkg/utils/logging"
+	"github.com/wangyihang/llm-redactor/pkg/config"
+	"github.com/wangyihang/llm-redactor/pkg/utils/logging"
 )
 
 func Exec(cli *config.CLI, logs *logging.Loggers) {
 	if len(cli.Exec.Command) == 0 {
-		fmt.Println("Usage: llm-prism exec -- <command> [args...]")
+		fmt.Println("Usage: llm-redactor exec -- <command> [args...]")
 		os.Exit(1)
 	}
 

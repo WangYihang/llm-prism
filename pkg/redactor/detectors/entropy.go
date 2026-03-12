@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 type EntropyDetector struct {

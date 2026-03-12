@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wangyihang/llm-prism/pkg/config"
-	"github.com/wangyihang/llm-prism/pkg/proxy"
-	"github.com/wangyihang/llm-prism/pkg/redactor"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
-	"github.com/wangyihang/llm-prism/pkg/utils/logging"
+	"github.com/wangyihang/llm-redactor/pkg/config"
+	"github.com/wangyihang/llm-redactor/pkg/proxy"
+	"github.com/wangyihang/llm-redactor/pkg/redactor"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/logging"
 )
 
 func Run(cli *config.CLI, logs *logging.Loggers) {

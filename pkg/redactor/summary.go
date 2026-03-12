@@ -32,7 +32,7 @@ func (r *Redactor) Summary() string {
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00BFFF"))
 	valStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FAFAFA"))
 
-	sb.WriteString(titleStyle.Render("LLM-Prism Redaction Summary"))
+	sb.WriteString(titleStyle.Render("LLM-Redactor Redaction Summary"))
 	sb.WriteString("\n")
 
 	// Section 1: Log file locations

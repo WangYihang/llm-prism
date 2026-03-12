@@ -9,7 +9,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/rs/zerolog"
-	"github.com/wangyihang/llm-prism/pkg/utils/ctxkeys"
+	"github.com/wangyihang/llm-redactor/pkg/utils/ctxkeys"
 )
 
 func TestContextKeys(t *testing.T) {
