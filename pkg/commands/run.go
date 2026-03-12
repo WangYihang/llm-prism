@@ -91,6 +91,7 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, a
 	if err != nil {
 		return nil, "", nil, err
 	}
+	actualAddr := ln.Addr().String()
 
 	go func() {
 		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
@@ -98,9 +99,9 @@ func StartProxy(cli *config.CLI, logs *logging.Loggers, host string, port int, a
 		}
 	}()
 
-	logs.System.Info().Str("addr", addr).Msg("proxy started")
+	logs.System.Info().Str("addr", actualAddr).Msg("proxy started")
 
-	return rdr, addr, func() {
+	return rdr, actualAddr, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 		_ = server.Shutdown(ctx)

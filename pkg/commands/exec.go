@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -64,10 +65,14 @@ func Exec(cli *config.CLI, logs *logging.Loggers) {
 
 	// Determine the proxy URL
 	proxyHost := cli.Exec.Host
-	if proxyHost == "0.0.0.0" {
-		proxyHost = "127.0.0.1"
+	if proxyHost == "0.0.0.0" || proxyHost == "127.0.0.1" || proxyHost == "::1" {
+		proxyHost = "localhost"
 	}
-	port := strings.Split(addr, ":")[len(strings.Split(addr, ":"))-1]
+	// addr might be [::]:port or 0.0.0.0:port
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		port = strings.Split(addr, ":")[len(strings.Split(addr, ":"))-1]
+	}
 	proxyURL := fmt.Sprintf("http://%s:%s", proxyHost, port)
 
 	// Prepare environment variables

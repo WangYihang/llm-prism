@@ -20,7 +20,7 @@ type CLI struct {
 		ApiKey   string   `help:"API Key" env:"LLM_PRISM_API_KEY"`
 		Provider string   `help:"Provider" env:"LLM_PRISM_PROVIDER" default:"deepseek" enum:"deepseek,kimi,claude,gemini,openai"`
 		Host     string   `help:"Host" env:"LLM_PRISM_HOST" default:"127.0.0.1"`
-		Port     int      `help:"Port" env:"LLM_PRISM_PORT" default:"4000"`
+		Port     int      `help:"Port" env:"LLM_PRISM_PORT" default:"0"`
 		Command  []string `arg:"" help:"Command to execute"`
 	} `cmd:"" help:"Execute a command through the proxy"`
 
