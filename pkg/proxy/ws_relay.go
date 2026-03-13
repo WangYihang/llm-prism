@@ -141,6 +141,7 @@ func (r *WebSocketRelay) acceptClientWebSocket(w http.ResponseWriter, req *http.
 		r.sysLog.Error().Err(err).Str("id", requestID).Msg("internal relay failed to accept websocket")
 		return nil, err
 	}
+	clientWS.SetReadLimit(-1)
 	return clientWS, nil
 }
 
@@ -161,6 +162,7 @@ func (r *WebSocketRelay) dialBackendWebSocket(ctx context.Context, wsTarget *url
 		r.sysLog.Error().Err(err).Str("id", requestID).Str("url", wsTarget.String()).Msg("internal relay failed to dial backend websocket")
 		return nil, err
 	}
+	backendWS.SetReadLimit(-1)
 	return backendWS, nil
 }
 
