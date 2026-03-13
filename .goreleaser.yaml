@@ -6,10 +6,27 @@ before:
     - go generate ./...
 
 builds:
-  - id: llm-redactor
+  - id: llm-redactor-exec
     env:
       - CGO_ENABLED=0
-    binary: llm-redactor
+    binary: llm-redactor-exec
+    main: ./cmd/llm-redactor-exec
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s
+      - -w
+      - -X github.com/wangyihang/llm-redactor/pkg/version.Version={{.Version}}
+      - -X github.com/wangyihang/llm-redactor/pkg/version.Commit={{.Commit}}
+      - -X github.com/wangyihang/llm-redactor/pkg/version.Date={{.Date}}
+
+  - id: llm-redactor-proxy
+    env:
+      - CGO_ENABLED=0
+    binary: llm-redactor-proxy
+    main: ./cmd/llm-redactor-proxy
     goos:
       - linux
       - windows
@@ -46,32 +63,3 @@ release:
   mode: replace
 
 report_sizes: true
-
-dockers_v2:
-  - id: llm-redactor
-    dockerfile: "Dockerfile"
-    ids:
-      - llm-redactor
-    images:
-      - "ghcr.io/wangyihang/llm-redactor"
-    tags:
-      - "v{{ .Version }}"
-      - "{{ if .IsNightly }}nightly{{ end }}"
-      - "{{ if not .IsNightly }}latest{{ end }}"
-    labels:
-      "org.opencontainers.image.description": "LLM Prism"
-      "org.opencontainers.image.created": "{{.Date}}"
-      "org.opencontainers.image.name": "{{.ProjectName}}"
-      "org.opencontainers.image.revision": "{{.FullCommit}}"
-      "org.opencontainers.image.version": "{{.Version}}"
-      "org.opencontainers.image.source": "{{.GitURL}}"
-    annotations:
-      "project": "{{.ProjectName}}"
-    platforms:
-      - linux/amd64
-    disable: "{{ .IsSnapshot }}"
-    sbom: "{{ not .IsNightly }}"
-    retry:
-      attempts: 5
-      delay: 5s
-      max_delay: 2m

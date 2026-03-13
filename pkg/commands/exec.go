@@ -17,7 +17,7 @@ import (
 
 func Exec(cli *config.ExecCLI, logs *logging.Loggers) {
 	if len(cli.Command) == 0 {
-		fmt.Println("Usage: llm-redactor -- <command> [args...]")
+		fmt.Println("Usage: llm-redactor-exec -- <command> [args...]")
 		os.Exit(1)
 	}
 
