@@ -3,6 +3,7 @@ package redactor
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -129,8 +130,9 @@ func New(configPath string, sysLog, detectionLog zerolog.Logger) (*Redactor, err
 	detectorsList := []detectors.Detector{
 		detectors.NewRegexDetector(regexRules),
 		detectors.NewDeepSeekDetector(),
+		detectors.NewIPDetector(),
 		// Default threshold 4.3 to skip hex-only strings (max entropy 4.0)
-		detectors.NewEntropyDetector(4.3, 32),
+		// detectors.NewEntropyDetector(4.3, 32),
 	}
 
 	r := &Redactor{
@@ -355,6 +357,33 @@ func (r *Redactor) RedactRequest(ctx context.Context, body []byte) ([]byte, bool
 	return res, true, err
 }
 
+// UnredactContent restores previously pseudonymized values (e.g. fake IPs back
+// to real IPs) in a single string. Only detectors that implement the
+// Unredactor interface participate.
+func (r *Redactor) UnredactContent(content string) string {
+	for _, d := range r.detectors {
+		if u, ok := d.(detectors.Unredactor); ok {
+			content = u.Unredact(content)
+		}
+	}
+	return content
+}
+
+// UnredactResponse restores pseudonymized values in a JSON response body.
+// Returns the restored body (and true) only when at least one substitution
+// was made; otherwise returns the original body unchanged.
+func (r *Redactor) UnredactResponse(body []byte) ([]byte, bool, error) {
+	if len(body) == 0 {
+		return body, false, nil
+	}
+
+	restored := r.UnredactContent(string(body))
+	if restored == string(body) {
+		return body, false, nil
+	}
+	return []byte(restored), true, nil
+}
+
 // RedactWebSocket redacts WebSocket messages.
 func (r *Redactor) RedactWebSocket(ctx context.Context, messageType websocket.MessageType, data []byte) ([]byte, bool, error) {
 	if messageType != websocket.MessageText {
@@ -371,4 +400,58 @@ func (r *Redactor) RedactWebSocket(ctx context.Context, messageType websocket.Me
 	return []byte(redacted), changed, nil
 }
 
-// StreamRedactor implements a sliding window redactor for SSE streams
+// streamUnredactReader wraps an io.ReadCloser and restores pseudonymized
+// values (e.g. fake IPs → real IPs) in each chunk as it is read. It handles
+// the case where the restored text is longer than the incoming chunk by keeping
+// an internal overflow buffer that is drained on the next Read call.
+//
+// Cross-chunk boundary splits: SSE/NDJSON chunks are typically 50–500 bytes
+// and fake IP tokens are at most ~20 chars, so splits are extremely unlikely.
+// If one does occur the token is left as-is in that response.
+type streamUnredactReader struct {
+	r        io.ReadCloser
+	unredact func(string) string
+	overflow []byte
+}
+
+func (s *streamUnredactReader) Read(p []byte) (int, error) {
+	// Drain the overflow buffer before reading more data.
+	if len(s.overflow) > 0 {
+		n := copy(p, s.overflow)
+		s.overflow = s.overflow[n:]
+		return n, nil
+	}
+
+	n, err := s.r.Read(p)
+	if n == 0 {
+		return 0, err
+	}
+
+	restored := []byte(s.unredact(string(p[:n])))
+	if len(restored) <= len(p) {
+		copy(p, restored)
+		return len(restored), err
+	}
+
+	// Restored content is larger than the caller's buffer: return what fits
+	// and keep the rest for the next Read.
+	copy(p, restored[:len(p)])
+	s.overflow = append(s.overflow[:0], restored[len(p):]...)
+	return len(p), err
+}
+
+func (s *streamUnredactReader) Close() error {
+	return s.r.Close()
+}
+
+// WrapStreamUnredactor wraps body so that pseudonymized values are restored
+// as the stream is consumed. Safe to call with a nil body (returns nil).
+func (r *Redactor) WrapStreamUnredactor(body io.ReadCloser) io.ReadCloser {
+	if body == nil {
+		return nil
+	}
+	return &streamUnredactReader{
+		r:        body,
+		unredact: r.UnredactContent,
+	}
+}

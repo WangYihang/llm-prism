@@ -145,8 +145,21 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 			var err error
 			responseBody, err = io.ReadAll(limitReader)
 			if err == nil {
+				// Restore pseudonymized values (e.g. fake IPs → real IPs) before
+				// returning the response to the client.
+				if rdr != nil {
+					if unredacted, changed, uerr := rdr.UnredactResponse(responseBody); uerr == nil && changed {
+						responseBody = unredacted
+					}
+				}
 				resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(responseBody), resp.Body))
+				resp.ContentLength = int64(len(responseBody))
 			}
+		} else if isStream && resp.Body != nil && rdr != nil {
+			// For streaming responses (SSE/NDJSON), wrap the body so that
+			// pseudonymized values are restored chunk-by-chunk as data flows.
+			resp.Body = rdr.WrapStreamUnredactor(resp.Body)
+			resp.ContentLength = -1 // length unknown after transform
 		}
 
 		reqEvt := zerolog.Dict().Str("id", requestID).Str("method", ctx.Req.Method).Str("path", ctx.Req.URL.Path).Str("host", ctx.Req.Host)

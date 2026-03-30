@@ -246,6 +246,14 @@ func (f *fakeRedactor) RedactWebSocket(ctx context.Context, messageType websocke
 	return data, false, nil
 }
 
+func (f *fakeRedactor) UnredactResponse(body []byte) ([]byte, bool, error) {
+	return body, false, nil
+}
+
+func (f *fakeRedactor) WrapStreamUnredactor(body io.ReadCloser) io.ReadCloser {
+	return body
+}
+
 func TestPipeWebSocket_NoRedactor(t *testing.T) {
 	src := &fakeWSConn{
 		reads: []wsRead{{typ: websocket.MessageText, data: []byte("hello")}},
