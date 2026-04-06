@@ -482,21 +482,36 @@ func (r *Redactor) RedactWebSocket(ctx context.Context, messageType websocket.Me
 }
 
 // streamUnredactReader wraps an io.ReadCloser and restores pseudonymized
-// values (e.g. fake IPs → real IPs) in each chunk as it is read. It handles
-// the case where the restored text is longer than the incoming chunk by keeping
-// an internal overflow buffer that is drained on the next Read call.
+// values (e.g. fake IPs → real IPs) in each chunk as it is read.
 //
-// Cross-chunk boundary splits: SSE/NDJSON chunks are typically 50–500 bytes
-// and fake IP tokens are at most ~20 chars, so splits are extremely unlikely.
-// If one does occur the token is left as-is in that response.
+// Token-split safety: the longest fake token the redactor emits is a fully-
+// expanded RFC 3849 IPv6 address ("2001:db8:0:0:0:0:0:ff" ≈ 22 bytes). To
+// prevent a token from being split across two consecutive Read calls and
+// therefore going unrestored, we retain up to maxTokenLen bytes at the tail of
+// each chunk as a "seam" that is prepended to the next chunk before running
+// UnredactContent. Only bytes before the seam are returned to the caller.
+// On EOF the seam is flushed without trimming.
 type streamUnredactReader struct {
 	r        io.ReadCloser
 	unredact func(string) string
-	overflow []byte
+	seam     []byte // tail of the previous chunk, held back to cover split tokens
+	overflow []byte // restored bytes that exceed the caller's buffer
 }
 
+// maxTokenLen is the upper bound on the byte length of any fake token the
+// redactor can emit across all detectors:
+//
+//   - IPv6 (fully expanded RFC 3849): "2001:db8:0:0:0:0:0:ff"       ≈  22 bytes
+//   - Email (faker generated):        "name.surname@sub.example.org" ≈  60 bytes
+//   - Git URL (faker generated):      "https://sub.host.tld/user/word.git" ≈ 80 bytes
+//
+// 256 is a round, conservative ceiling that covers all of the above and leaves
+// ample room for future detectors, while remaining negligible compared to a
+// typical SSE chunk (usually 100–4000 bytes).
+const maxTokenLen = 256
+
 func (s *streamUnredactReader) Read(p []byte) (int, error) {
-	// Drain the overflow buffer before reading more data.
+	// Drain overflow from a previous over-large restored chunk first.
 	if len(s.overflow) > 0 {
 		n := copy(p, s.overflow)
 		s.overflow = s.overflow[n:]
@@ -504,21 +519,58 @@ func (s *streamUnredactReader) Read(p []byte) (int, error) {
 	}
 
 	n, err := s.r.Read(p)
-	if n == 0 {
-		return 0, err
+	if n == 0 && err != nil {
+		// EOF (or error): flush the seam if any.
+		if len(s.seam) == 0 {
+			return 0, err
+		}
+		restored := []byte(s.unredact(string(s.seam)))
+		s.seam = s.seam[:0]
+		if len(restored) <= len(p) {
+			copy(p, restored)
+			return len(restored), err
+		}
+		copy(p, restored[:len(p)])
+		s.overflow = append(s.overflow[:0], restored[len(p):]...)
+		return len(p), err
 	}
 
-	restored := []byte(s.unredact(string(p[:n])))
+	// Combine previous seam with new chunk and unredact together.
+	combined := append(s.seam, p[:n]...)
+
+	// Hold back the last maxTokenLen bytes as the new seam (unless this is
+	// the final read, signalled by err != nil).  When combined is shorter
+	// than maxTokenLen we keep everything in the seam and return nothing —
+	// the seam will be flushed when the underlying reader signals EOF.
+	var toProcess []byte
+	if err != nil {
+		// Final read: flush everything.
+		toProcess = combined
+		s.seam = s.seam[:0]
+	} else if len(combined) > maxTokenLen {
+		seamStart := len(combined) - maxTokenLen
+		toProcess = combined[:seamStart]
+		s.seam = append(s.seam[:0], combined[seamStart:]...)
+	} else {
+		// Not enough data to safely process yet; keep accumulating.
+		s.seam = append(s.seam[:0], combined...)
+		return 0, nil
+	}
+
+	if len(toProcess) == 0 {
+		return 0, nil
+	}
+
+	restored := []byte(s.unredact(string(toProcess)))
 	if len(restored) <= len(p) {
 		copy(p, restored)
-		return len(restored), err
+		return len(restored), nil
 	}
 
-	// Restored content is larger than the caller's buffer: return what fits
-	// and keep the rest for the next Read.
+	// Restored content is larger than the caller's buffer.
 	copy(p, restored[:len(p)])
 	s.overflow = append(s.overflow[:0], restored[len(p):]...)
-	return len(p), err
+	return len(p), nil
 }
 
 func (s *streamUnredactReader) Close() error {

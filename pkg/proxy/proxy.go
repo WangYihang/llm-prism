@@ -141,19 +141,25 @@ func New(rdr ContentRedactor, sysLog, sysFileLog, trafficLog zerolog.Logger, ses
 
 		if resp.Body != nil && !isStream {
 			const maxLogSize = 1024 * 1024
-			limitReader := io.LimitReader(resp.Body, maxLogSize)
 			var err error
-			responseBody, err = io.ReadAll(limitReader)
+			responseBody, err = io.ReadAll(io.LimitReader(resp.Body, maxLogSize))
 			if err == nil {
-				// Restore pseudonymized values (e.g. fake IPs → real IPs) before
-				// returning the response to the client.
+				// Restore pseudonymized values (e.g. fake IPs → real IPs) in the
+				// buffered portion before returning the response to the client.
 				if rdr != nil {
 					if unredacted, changed, uerr := rdr.UnredactResponse(responseBody); uerr == nil && changed {
 						responseBody = unredacted
 					}
 				}
-				resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(responseBody), resp.Body))
-				resp.ContentLength = int64(len(responseBody))
+				// Reconstruct the body: the unredacted buffer first, then the
+				// remainder (anything past maxLogSize) wrapped so it is also
+				// unredacted as it streams out.
+				tail := resp.Body
+				if rdr != nil {
+					tail = rdr.WrapStreamUnredactor(resp.Body)
+				}
+				resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(responseBody), tail))
+				resp.ContentLength = -1
 			}
 		} else if isStream && resp.Body != nil && rdr != nil {
 			// For streaming responses (SSE/NDJSON), wrap the body so that

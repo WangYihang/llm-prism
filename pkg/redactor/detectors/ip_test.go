@@ -12,11 +12,11 @@ func TestIPDetectorIPv6DoubleColonNotInsideIdentifiers(t *testing.T) {
 	for _, in := range []string{
 		"namespace::func",
 		"foo::bar",
-		"myns::dead:beef",
+		"myns::dead:beef", // "::dead:beef" is IPv6-shaped inside a longer token
 	} {
 		t.Run(in, func(t *testing.T) {
 			out := d.Redact(ctx, in, func(match, _, _ string) string {
-				t.Fatalf("should not redact scope-like :: tokens, hit %q in %q", match, in)
+				t.Fatalf("should not redact C++/Rust scope syntax, hit %q in %q", match, in)
 				return ""
 			})
 			if out != in {

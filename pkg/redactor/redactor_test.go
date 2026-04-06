@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -352,6 +354,111 @@ func TestRedactAfterCloseDoesNotPanic(t *testing.T) {
 	if r.DroppedEvents() == 0 {
 		t.Fatal("expected dropped events after close")
 	}
+}
+
+// streamSplitRoundTrip is a table-driven helper that:
+//  1. Redacts `real` using the supplied redactor to discover the fake token.
+//  2. Builds a payload "prefix-<fakeToken>-suffix".
+//  3. Feeds the payload through WrapStreamUnredactor in chunks of every size
+//     from 1 up to len(fakeToken)+4, verifying the original is fully restored.
+func streamSplitRoundTrip(t *testing.T, r *Redactor, real string) {
+	t.Helper()
+
+	redacted, changed := r.RedactContent(context.Background(), real)
+	if !changed {
+		t.Fatalf("expected redaction for %q, got unchanged", real)
+	}
+	if redacted == real {
+		t.Fatalf("expected fake token for %q, got original back", real)
+	}
+
+	payload := "prefix-" + redacted + "-suffix"
+	want := "prefix-" + real + "-suffix"
+
+	for chunkSize := 1; chunkSize <= len(redacted)+4; chunkSize++ {
+		t.Run(fmt.Sprintf("chunk%d", chunkSize), func(t *testing.T) {
+			var chunks [][]byte
+			for i := 0; i < len(payload); i += chunkSize {
+				end := i + chunkSize
+				if end > len(payload) {
+					end = len(payload)
+				}
+				chunks = append(chunks, []byte(payload[i:end]))
+			}
+
+			sr := r.WrapStreamUnredactor(io.NopCloser(&multiChunkReader{chunks: chunks}))
+			out, err := io.ReadAll(sr)
+			if err != nil {
+				t.Fatalf("read error: %v", err)
+			}
+			if string(out) != want {
+				t.Fatalf("wrong output (chunkSize=%d)\ngot:  %q\nwant: %q", chunkSize, out, want)
+			}
+		})
+	}
+}
+
+// TestStreamUnredactReaderTokenSplitAcrossChunks verifies that fake tokens
+// whose bytes are split exactly across two Read calls are still restored,
+// for every detector type that implements Unredactor.
+func TestStreamUnredactReaderTokenSplitAcrossChunks(t *testing.T) {
+	t.Run("IPv6", func(t *testing.T) {
+		r := &Redactor{
+			config:    &Config{},
+			logs:      zerolog.Nop(),
+			detectors: []detectors.Detector{detectors.NewIPDetector(false)},
+			eventCh:   make(chan detectionEvent, eventChannelSize),
+			done:      make(chan struct{}),
+		}
+		go r.processEvents()
+		defer r.Close()
+		// Full-form IPv6 so the boundary check doesn't see an alphanumeric char
+		// adjacent to the match start.
+		streamSplitRoundTrip(t, r, "2001:0db9:0000:0000:0000:0000:0000:0001")
+	})
+
+	t.Run("Email", func(t *testing.T) {
+		r := &Redactor{
+			config:    &Config{},
+			logs:      zerolog.Nop(),
+			detectors: []detectors.Detector{detectors.NewEmailDetector()},
+			eventCh:   make(chan detectionEvent, eventChannelSize),
+			done:      make(chan struct{}),
+		}
+		go r.processEvents()
+		defer r.Close()
+		streamSplitRoundTrip(t, r, "alice.smith@private-corp.internal")
+	})
+
+	t.Run("GitURL", func(t *testing.T) {
+		r := &Redactor{
+			config:    &Config{},
+			logs:      zerolog.Nop(),
+			detectors: []detectors.Detector{detectors.NewGitProjectDetector()},
+			eventCh:   make(chan detectionEvent, eventChannelSize),
+			done:      make(chan struct{}),
+		}
+		go r.processEvents()
+		defer r.Close()
+		// A self-hosted git URL (not a well-known host) so it gets pseudonymized.
+		streamSplitRoundTrip(t, r, "https://gitlab.internal.mycompany.com/myorg/myrepo\n")
+	})
+}
+
+// multiChunkReader returns one fixed chunk per Read call, then EOF.
+type multiChunkReader struct {
+	chunks [][]byte
+	pos    int
+}
+
+func (m *multiChunkReader) Read(p []byte) (int, error) {
+	if m.pos >= len(m.chunks) {
+		return 0, io.EOF
+	}
+	chunk := m.chunks[m.pos]
+	m.pos++
+	n := copy(p, chunk)
+	return n, nil
 }
 
 func TestDroppedEventsOnFullChannel(t *testing.T) {

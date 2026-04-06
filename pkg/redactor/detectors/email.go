@@ -3,6 +3,7 @@ package detectors
 import (
 	"context"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/go-faker/faker/v4"
@@ -65,9 +66,13 @@ type EmailDetector struct {
 
 func NewEmailDetector() *EmailDetector {
 	return &EmailDetector{
-		// RFC 5321-ish pattern; intentionally broad to avoid false negatives.
+		// RFC 5321-ish pattern. The local part must start and end with an
+		// alphanumeric character so that a hyphen immediately before the "@"
+		// sign cannot be absorbed from surrounding punctuation (e.g. "foo-bar"
+		// in "call foo-bar@example.com" must not match "bar@example.com" when
+		// preceded by "foo-"). The domain part follows the same rule.
 		re: regexp.MustCompile(
-			`\b[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b`,
+			`\b[a-zA-Z0-9][a-zA-Z0-9._%+\-]*@[a-zA-Z0-9][a-zA-Z0-9.\-]*\.[a-zA-Z]{2,}\b`,
 		),
 		pseudonymizer: NewEmailPseudonymizer(),
 	}
@@ -89,10 +94,43 @@ func (d *EmailDetector) Redact(ctx context.Context, content string, callback Red
 // addresses. Only addresses that were substituted in the current session are
 // restored.
 func (d *EmailDetector) Unredact(content string) string {
-	return d.re.ReplaceAllStringFunc(content, func(match string) string {
-		if real, ok := d.pseudonymizer.Restore(match); ok {
-			return real
-		}
+	idxs := d.re.FindAllStringIndex(content, -1)
+	if len(idxs) == 0 {
+		return content
+	}
+	var b strings.Builder
+	b.Grow(len(content))
+	last := 0
+	for _, loc := range idxs {
+		start, end := loc[0], loc[1]
+		b.WriteString(content[last:start])
+		b.WriteString(d.unredactEmailMatch(content[start:end]))
+		last = end
+	}
+	b.WriteString(content[last:])
+	return b.String()
+}
+
+// unredactEmailMatch restores match when it equals a known fake. The regex can
+// absorb a hyphenated prefix into the local part (e.g. "prefix-fake@dom.tld"
+// when the real token was only "fake@dom.tld") because \b matches at the start
+// of "prefix"; trim the local part from the left until Restore succeeds.
+func (d *EmailDetector) unredactEmailMatch(match string) string {
+	if real, ok := d.pseudonymizer.Restore(match); ok {
+		return real
+	}
+	at := strings.IndexByte(match, '@')
+	if at <= 0 {
 		return match
-	})
+	}
+	for j := 1; j < at; j++ {
+		sub := match[j:]
+		if !d.re.MatchString(sub) {
+			continue
+		}
+		if real, ok := d.pseudonymizer.Restore(sub); ok {
+			return match[:j] + real
+		}
+	}
+	return match
 }
