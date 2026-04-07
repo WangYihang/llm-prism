@@ -51,6 +51,14 @@ func (f *chunkRedactor) RedactWebSocket(ctx context.Context, messageType websock
 	return data, false, nil
 }
 
+func (f *chunkRedactor) UnredactResponse(body []byte) ([]byte, bool, error) {
+	return body, false, nil
+}
+
+func (f *chunkRedactor) WrapStreamUnredactor(body io.ReadCloser) io.ReadCloser {
+	return body
+}
+
 func TestRedactRequestBody_RedactsChunkedBodies(t *testing.T) {
 	rdr := &chunkRedactor{changed: true}
 
